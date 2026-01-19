@@ -1,0 +1,5 @@
+{
+  "name": "Hero Cover Color Combinator",
+  "description": "A tool for identifying 2-color combinations from the Tailwind CSS palette that meet specific contrast, hue, and saturation requirements for website hero components.",
+  "requestFramePermissions": []
+}

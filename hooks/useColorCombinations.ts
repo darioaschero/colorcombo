@@ -132,13 +132,20 @@ export function useColorCombinations({
     for (const candidate of candidates) {
       let isDiverseEnough = true;
       for (const kept of filtered) {
-        // Check both orientations since (A,B) is similar to (B,A)
-        // Orientation 1: candidate.c1 ↔ kept.c1, candidate.c2 ↔ kept.c2
+        // Orientation 1: direct comparison (candidate.c1 ↔ kept.c1, candidate.c2 ↔ kept.c2)
         const dist1 = (getColorDistance(candidate.hsl1, kept.hsl1) + getColorDistance(candidate.hsl2, kept.hsl2)) / 2;
-        // Orientation 2: candidate.c1 ↔ kept.c2, candidate.c2 ↔ kept.c1
-        const dist2 = (getColorDistance(candidate.hsl1, kept.hsl2) + getColorDistance(candidate.hsl2, kept.hsl1)) / 2;
-        // Use the minimum distance (most similar orientation)
-        const comboDist = Math.min(dist1, dist2);
+        
+        let comboDist: number;
+        
+        if (excludeInverse) {
+          // When excluding inverses, check both orientations since (A,B) should be same as (B,A)
+          const dist2 = (getColorDistance(candidate.hsl1, kept.hsl2) + getColorDistance(candidate.hsl2, kept.hsl1)) / 2;
+          comboDist = Math.min(dist1, dist2);
+        } else {
+          // When including inverses, only check direct orientation
+          // This allows {A,B} and {B,A} to both pass as distinct combinations
+          comboDist = dist1;
+        }
         
         if (comboDist < minTotalDistance) {
           isDiverseEnough = false;
@@ -174,11 +181,16 @@ export function useColorCombinations({
     // More neighbors = better global diversity but slower
     const neighborhoodDepth = 6;
 
-    // Helper: calculate distance between two combinations (considers both orientations)
+    // Helper: calculate distance between two combinations
+    // When excluding inverses, check both orientations (A,B same as B,A)
+    // When including inverses, only check direct orientation (A,B different from B,A)
     const comboDistance = (a: ComboWithMeta, b: ComboWithMeta): number => {
       const d1 = getColorDistance(a.hsl1, b.hsl1) + getColorDistance(a.hsl2, b.hsl2);
-      const d2 = getColorDistance(a.hsl1, b.hsl2) + getColorDistance(a.hsl2, b.hsl1);
-      return Math.min(d1, d2);
+      if (excludeInverse) {
+        const d2 = getColorDistance(a.hsl1, b.hsl2) + getColorDistance(a.hsl2, b.hsl1);
+        return Math.min(d1, d2);
+      }
+      return d1;
     };
 
     while (pool.length > 0 && sortedCount < maxDiversitySort) {
@@ -218,7 +230,7 @@ export function useColorCombinations({
     
     // Append remaining unsorted combinations
     return [...sorted, ...pool];
-  }, [baseCombinations, isDiverse]);
+  }, [baseCombinations, isDiverse, excludeInverse]);
 
   return {
     combinations: displayedCombinations,

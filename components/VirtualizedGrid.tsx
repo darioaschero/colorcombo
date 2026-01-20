@@ -37,11 +37,18 @@ export const VirtualizedGrid = React.memo(({
   if (viewMode === 'large') {
     return (
       <div className="h-full overflow-y-auto">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+        {/* Responsive grid: auto-fill columns, min 240px, max 360px each */}
+        <div 
+          className="grid gap-2"
+          style={{ 
+            gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+          }}
+        >
           {displayedCombos.map((combo, idx) => (
             <div 
               key={`${combo.c1.id}-${combo.c2.id}-${idx}`}
               className="group bg-white rounded-[6px] overflow-hidden shadow-sm hover:shadow-2xl transition-all duration-500 border border-slate-200 flex flex-col cursor-pointer hover:-translate-y-1"
+              style={{ maxWidth: '360px' }}
             >
               <div className="relative aspect-[100/142] w-full bg-slate-100 flex items-center justify-center overflow-hidden">
                 <HeroPreview 

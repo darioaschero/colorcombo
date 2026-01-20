@@ -37,3 +37,59 @@ export const ALL_COLORS: ColorInfo[] = COLOR_NAMES.flatMap((name) =>
     id: `${name}-${shade}`,
   }))
 );
+
+// Tundra Palette - 14 colors from the SVG (exact colors, no manipulation)
+export const TUNDRA_COLORS: ColorInfo[] = [
+  // Top row
+  { name: 'vibrant-blue', shade: 'base', hex: '#0B00F5', id: 'tundra-vibrant-blue' },
+  { name: 'deep-purple', shade: 'base', hex: '#7800C6', id: 'tundra-deep-purple' },
+  { name: 'lime-green', shade: 'base', hex: '#0CF406', id: 'tundra-lime-green' },
+  { name: 'magenta', shade: 'base', hex: '#FF00FF', id: 'tundra-magenta' },
+  { name: 'sunny-yellow', shade: 'base', hex: '#FCEE21', id: 'tundra-sunny-yellow' },
+  { name: 'cyan', shade: 'base', hex: '#00FFFF', id: 'tundra-cyan' },
+  { name: 'bright-red', shade: 'base', hex: '#FF1010', id: 'tundra-bright-red' },
+  // Bottom row
+  { name: 'dusty-blue', shade: 'base', hex: '#4B8AC4', id: 'tundra-dusty-blue' },
+  { name: 'lavender', shade: 'base', hex: '#A378C4', id: 'tundra-lavender' },
+  { name: 'forest-green', shade: 'base', hex: '#009245', id: 'tundra-forest-green' },
+  { name: 'pastel-pink', shade: 'base', hex: '#D884D8', id: 'tundra-pastel-pink' },
+  { name: 'warm-brown', shade: 'base', hex: '#8C6239', id: 'tundra-warm-brown' },
+  { name: 'sky-blue', shade: 'base', hex: '#34CBF4', id: 'tundra-sky-blue' },
+  { name: 'burnt-orange', shade: 'base', hex: '#F45516', id: 'tundra-burnt-orange' },
+];
+
+export const TUNDRA_COLOR_NAMES = TUNDRA_COLORS.map(c => c.name);
+
+// New York Palette - 24 colors from the SVG (exact colors, no manipulation)
+// Layout: 8 columns x 3 rows
+export const NEWYORK_COLORS: ColorInfo[] = [
+  // Row 1
+  { name: 'red-dark', shade: 'base', hex: '#D72A38', id: 'ny-red-dark' },
+  { name: 'blue-dark', shade: 'base', hex: '#06284C', id: 'ny-blue-dark' },
+  { name: 'purple-dark', shade: 'base', hex: '#573A68', id: 'ny-purple-dark' },
+  { name: 'green-dark', shade: 'base', hex: '#045F48', id: 'ny-green-dark' },
+  { name: 'yellow-dark', shade: 'base', hex: '#A28C4D', id: 'ny-yellow-dark' },
+  { name: 'burgundy-dark', shade: 'base', hex: '#692239', id: 'ny-burgundy-dark' },
+  { name: 'olive-dark', shade: 'base', hex: '#37461E', id: 'ny-olive-dark' },
+  { name: 'teal-dark', shade: 'base', hex: '#425A60', id: 'ny-teal-dark' },
+  // Row 2
+  { name: 'red-medium', shade: 'base', hex: '#FC504B', id: 'ny-red-medium' },
+  { name: 'blue-medium', shade: 'base', hex: '#3D55A5', id: 'ny-blue-medium' },
+  { name: 'purple-medium', shade: 'base', hex: '#6E5F9E', id: 'ny-purple-medium' },
+  { name: 'green-medium', shade: 'base', hex: '#07947A', id: 'ny-green-medium' },
+  { name: 'yellow-medium', shade: 'base', hex: '#D1C06A', id: 'ny-yellow-medium' },
+  { name: 'burgundy-medium', shade: 'base', hex: '#97434E', id: 'ny-burgundy-medium' },
+  { name: 'olive-medium', shade: 'base', hex: '#6F7653', id: 'ny-olive-medium' },
+  { name: 'teal-medium', shade: 'base', hex: '#9BADB4', id: 'ny-teal-medium' },
+  // Row 3
+  { name: 'red-light', shade: 'base', hex: '#FBA0A4', id: 'ny-red-light' },
+  { name: 'blue-light', shade: 'base', hex: '#C9ECFB', id: 'ny-blue-light' },
+  { name: 'purple-light', shade: 'base', hex: '#D6D5F0', id: 'ny-purple-light' },
+  { name: 'green-light', shade: 'base', hex: '#A7E4C8', id: 'ny-green-light' },
+  { name: 'yellow-light', shade: 'base', hex: '#EFE587', id: 'ny-yellow-light' },
+  { name: 'burgundy-light', shade: 'base', hex: '#E5C6CF', id: 'ny-burgundy-light' },
+  { name: 'olive-light', shade: 'base', hex: '#E0E5D7', id: 'ny-olive-light' },
+  { name: 'teal-light', shade: 'base', hex: '#D2DDE2', id: 'ny-teal-light' },
+];
+
+export const NEWYORK_COLOR_NAMES = NEWYORK_COLORS.map(c => c.name);

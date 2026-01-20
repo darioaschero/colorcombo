@@ -117,13 +117,21 @@ export function useColorCombinations({
     }
 
     // Apply minimum total distance filter if set
+    // This filters out combinations that are too similar to already-kept combinations
     if (minTotalDistance === 0) return candidates;
 
     const filtered: ComboWithMeta[] = [];
     for (const candidate of candidates) {
       let isDiverseEnough = true;
       for (const kept of filtered) {
-        const comboDist = (getColorDistance(candidate.hsl1, kept.hsl1) + getColorDistance(candidate.hsl2, kept.hsl2)) / 2;
+        // Check both orientations since (A,B) is similar to (B,A)
+        // Orientation 1: candidate.c1 ↔ kept.c1, candidate.c2 ↔ kept.c2
+        const dist1 = (getColorDistance(candidate.hsl1, kept.hsl1) + getColorDistance(candidate.hsl2, kept.hsl2)) / 2;
+        // Orientation 2: candidate.c1 ↔ kept.c2, candidate.c2 ↔ kept.c1
+        const dist2 = (getColorDistance(candidate.hsl1, kept.hsl2) + getColorDistance(candidate.hsl2, kept.hsl1)) / 2;
+        // Use the minimum distance (most similar orientation)
+        const comboDist = Math.min(dist1, dist2);
+        
         if (comboDist < minTotalDistance) {
           isDiverseEnough = false;
           break;

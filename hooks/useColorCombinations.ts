@@ -156,7 +156,14 @@ export function useColorCombinations({
   const displayedCombinations = useMemo(() => {
     if (!isDiverse || baseCombinations.length <= 1) return baseCombinations;
 
+    // Shuffle the pool first to remove bias from original order
+    // Using Fisher-Yates shuffle for uniform distribution
     const pool = [...baseCombinations];
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    
     const sorted: ComboWithMeta[] = [pool.shift()!];
 
     // Limit diversity sorting to first 500 to keep it fast

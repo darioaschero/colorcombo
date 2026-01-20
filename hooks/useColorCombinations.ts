@@ -173,11 +173,16 @@ export function useColorCombinations({
     const firstItem = pool.shift()!;
     const sorted: ComboWithMeta[] = [firstItem];
 
-    // Track when each color was last seen (by position in sorted list)
-    // Key: color id, Value: last position where this color appeared
-    const colorLastSeen = new Map<string, number>();
-    colorLastSeen.set(firstItem.c1.id, 0);
-    colorLastSeen.set(firstItem.c2.id, 0);
+    // Track when each color was last seen in EACH POSITION (c1 vs c2)
+    // This prevents same color appearing in same slot consecutively
+    const colorLastSeenAsC1 = new Map<string, number>();
+    const colorLastSeenAsC2 = new Map<string, number>();
+    const colorLastSeenAny = new Map<string, number>();
+    
+    colorLastSeenAsC1.set(firstItem.c1.id, 0);
+    colorLastSeenAsC2.set(firstItem.c2.id, 0);
+    colorLastSeenAny.set(firstItem.c1.id, 0);
+    colorLastSeenAny.set(firstItem.c2.id, 0);
 
     // Limit diversity sorting to first 500 to keep it fast
     const maxDiversitySort = Math.min(500, pool.length);
@@ -185,7 +190,8 @@ export function useColorCombinations({
 
     // Algorithm parameters
     const neighborhoodDepth = 6;  // How many neighbors to consider for diversity
-    const recencyWeight = 0.4;    // Balance between diversity (1-λ) and color spread (λ)
+    const recencyWeight = 0.3;    // Weight for general color spread
+    const positionRecencyWeight = 0.2;  // Extra weight for same-position repetition penalty
     const maxRecencyBonus = 100;  // Cap the recency bonus to prevent domination
 
     // Helper: calculate distance between two combinations
@@ -221,26 +227,32 @@ export function useColorCombinations({
           diversityScore /= totalWeight;
         }
 
-        // === OBJECTIVE 2: Color recency (spread colors evenly) ===
-        // Bonus for using colors that haven't been seen recently
-        const lastSeenC1 = colorLastSeen.get(candidate.c1.id) ?? -Infinity;
-        const lastSeenC2 = colorLastSeen.get(candidate.c2.id) ?? -Infinity;
+        // === OBJECTIVE 2: General color recency (spread colors evenly) ===
+        const lastSeenC1Any = colorLastSeenAny.get(candidate.c1.id) ?? -Infinity;
+        const lastSeenC2Any = colorLastSeenAny.get(candidate.c2.id) ?? -Infinity;
         
-        // How long since each color was last used
-        const recencyC1 = currentPos - lastSeenC1;
-        const recencyC2 = currentPos - lastSeenC2;
+        const recencyC1 = Math.min(currentPos - lastSeenC1Any, maxRecencyBonus);
+        const recencyC2 = Math.min(currentPos - lastSeenC2Any, maxRecencyBonus);
+        const generalRecencyBonus = Math.min(recencyC1, recencyC2);
+
+        // === OBJECTIVE 3: Position-specific recency (avoid same color in same slot) ===
+        // Strong penalty if this color was recently used in the SAME position (c1 or c2)
+        const lastSeenC1AsC1 = colorLastSeenAsC1.get(candidate.c1.id) ?? -Infinity;
+        const lastSeenC2AsC2 = colorLastSeenAsC2.get(candidate.c2.id) ?? -Infinity;
         
-        // Use minimum recency (most recently used color determines bonus)
-        // This encourages spreading ALL colors, not just one
-        const recencyBonus = Math.min(
-          Math.min(recencyC1, recencyC2),
-          maxRecencyBonus
-        );
+        const posRecencyC1 = Math.min(currentPos - lastSeenC1AsC1, maxRecencyBonus);
+        const posRecencyC2 = Math.min(currentPos - lastSeenC2AsC2, maxRecencyBonus);
+        const positionRecencyBonus = Math.min(posRecencyC1, posRecencyC2);
 
         // === COMBINE SCORES ===
-        // Normalize recency to be in similar range as diversity (roughly 0-100)
-        const normalizedRecency = recencyBonus * 2;
-        const finalScore = (1 - recencyWeight) * diversityScore + recencyWeight * normalizedRecency;
+        // diversityWeight + recencyWeight + positionRecencyWeight should = 1.0
+        const diversityWeight = 1 - recencyWeight - positionRecencyWeight; // 0.5
+        const normalizedGeneralRecency = generalRecencyBonus * 2;
+        const normalizedPositionRecency = positionRecencyBonus * 2;
+        
+        const finalScore = diversityWeight * diversityScore 
+                         + recencyWeight * normalizedGeneralRecency
+                         + positionRecencyWeight * normalizedPositionRecency;
 
         if (finalScore > bestScore) {
           bestScore = finalScore;
@@ -251,9 +263,11 @@ export function useColorCombinations({
       const chosen = pool.splice(bestIdx, 1)[0];
       sorted.push(chosen);
       
-      // Update color last seen positions
-      colorLastSeen.set(chosen.c1.id, currentPos);
-      colorLastSeen.set(chosen.c2.id, currentPos);
+      // Update color tracking - both general and position-specific
+      colorLastSeenAny.set(chosen.c1.id, currentPos);
+      colorLastSeenAny.set(chosen.c2.id, currentPos);
+      colorLastSeenAsC1.set(chosen.c1.id, currentPos);
+      colorLastSeenAsC2.set(chosen.c2.id, currentPos);
       
       sortedCount++;
     }

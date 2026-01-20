@@ -150,34 +150,68 @@ export function useColorCombinations({
     return filtered;
   }, [deferredSelectedIds, minHueDistance, minSatDistance, minLumDistance, minTotalDistance, minBgContrast, excludeInverse, colorDataCache, currentPalette]);
 
-  // Apply diverse sorting if enabled - but only for display ordering
+  // Apply diverse sorting if enabled - using weighted neighborhood algorithm
+  // This considers multiple neighbors with exponentially decreasing weights
+  // so items are different not just from immediate neighbor but from nearby items too
   const displayedCombinations = useMemo(() => {
     if (!isDiverse || baseCombinations.length <= 1) return baseCombinations;
 
+    // Shuffle the pool first to remove bias from original order
+    // Using Fisher-Yates shuffle for uniform distribution
     const pool = [...baseCombinations];
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    
     const sorted: ComboWithMeta[] = [pool.shift()!];
 
     // Limit diversity sorting to first 500 to keep it fast
-    // But we'll display ALL combinations via virtualization
     const maxDiversitySort = Math.min(500, pool.length);
     let sortedCount = 1;
 
+    // How many neighbors to consider (affects how "globally" diverse the sorting is)
+    // More neighbors = better global diversity but slower
+    const neighborhoodDepth = 6;
+
+    // Helper: calculate distance between two combinations (considers both orientations)
+    const comboDistance = (a: ComboWithMeta, b: ComboWithMeta): number => {
+      const d1 = getColorDistance(a.hsl1, b.hsl1) + getColorDistance(a.hsl2, b.hsl2);
+      const d2 = getColorDistance(a.hsl1, b.hsl2) + getColorDistance(a.hsl2, b.hsl1);
+      return Math.min(d1, d2);
+    };
+
     while (pool.length > 0 && sortedCount < maxDiversitySort) {
-      let maxDist = -1;
+      let bestScore = -Infinity;
       let bestIdx = 0;
-      const last = sorted[sorted.length - 1];
 
       for (let i = 0; i < pool.length; i++) {
-        const current = pool[i];
-        const d1 = getColorDistance(last.hsl1, current.hsl1) + getColorDistance(last.hsl2, current.hsl2);
-        const d2 = getColorDistance(last.hsl1, current.hsl2) + getColorDistance(last.hsl2, current.hsl1);
-        const dist = Math.min(d1, d2);
+        const candidate = pool[i];
+        let score = 0;
+        let totalWeight = 0;
 
-        if (dist > maxDist) {
-          maxDist = dist;
+        // Calculate weighted distance to recent neighbors
+        // Weight decreases exponentially: 1.0, 0.5, 0.25, 0.125, ...
+        const neighborsToCheck = Math.min(neighborhoodDepth, sorted.length);
+        for (let n = 0; n < neighborsToCheck; n++) {
+          const neighbor = sorted[sorted.length - 1 - n];
+          const weight = 1 / Math.pow(2, n); // 1, 0.5, 0.25, 0.125...
+          const dist = comboDistance(candidate, neighbor);
+          score += weight * dist;
+          totalWeight += weight;
+        }
+
+        // Normalize by total weight to make scores comparable
+        if (totalWeight > 0) {
+          score /= totalWeight;
+        }
+
+        if (score > bestScore) {
+          bestScore = score;
           bestIdx = i;
         }
       }
+
       sorted.push(pool.splice(bestIdx, 1)[0]);
       sortedCount++;
     }

@@ -157,42 +157,10 @@ export function useColorCombinations({
     return filtered;
   }, [deferredSelectedIds, minHueDistance, minSatDistance, minLumDistance, minTotalDistance, minBgContrast, excludeInverse, colorDataCache, currentPalette]);
 
-  // Apply diverse sorting if enabled - using multi-objective algorithm
-  // Objectives: 1) Maximize distance from neighbors, 2) Spread colors evenly throughout list
+  // Apply diverse sorting using Quality Tiers + Interleave approach
+  // This ensures homogeneous diversity throughout the ENTIRE list, not just at the beginning
   const displayedCombinations = useMemo(() => {
     if (!isDiverse || baseCombinations.length <= 1) return baseCombinations;
-
-    // Shuffle the pool first to remove bias from original order
-    // Using Fisher-Yates shuffle for uniform distribution
-    const pool = [...baseCombinations];
-    for (let i = pool.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [pool[i], pool[j]] = [pool[j], pool[i]];
-    }
-    
-    const firstItem = pool.shift()!;
-    const sorted: ComboWithMeta[] = [firstItem];
-
-    // Track when each color was last seen in EACH POSITION (c1 vs c2)
-    // This prevents same color appearing in same slot consecutively
-    const colorLastSeenAsC1 = new Map<string, number>();
-    const colorLastSeenAsC2 = new Map<string, number>();
-    const colorLastSeenAny = new Map<string, number>();
-    
-    colorLastSeenAsC1.set(firstItem.c1.id, 0);
-    colorLastSeenAsC2.set(firstItem.c2.id, 0);
-    colorLastSeenAny.set(firstItem.c1.id, 0);
-    colorLastSeenAny.set(firstItem.c2.id, 0);
-
-    // Limit diversity sorting to first 500 to keep it fast
-    const maxDiversitySort = Math.min(500, pool.length);
-    let sortedCount = 1;
-
-    // Algorithm parameters
-    const neighborhoodDepth = 6;  // How many neighbors to consider for diversity
-    const recencyWeight = 0.3;    // Weight for general color spread
-    const positionRecencyWeight = 0.2;  // Extra weight for same-position repetition penalty
-    const maxRecencyBonus = 100;  // Cap the recency bonus to prevent domination
 
     // Helper: calculate distance between two combinations
     const comboDistance = (a: ComboWithMeta, b: ComboWithMeta): number => {
@@ -204,76 +172,111 @@ export function useColorCombinations({
       return d1;
     };
 
-    while (pool.length > 0 && sortedCount < maxDiversitySort) {
-      let bestScore = -Infinity;
+    // === PHASE 1: Calculate quality score for each combination ===
+    // Quality = internal diversity (how different c1 and c2 are from each other)
+    // Higher score = more visually interesting combination
+    const combosWithScore = baseCombinations.map(combo => ({
+      combo,
+      quality: getColorDistance(combo.hsl1, combo.hsl2)
+    }));
+
+    // === PHASE 2: Sort by quality and divide into tiers ===
+    combosWithScore.sort((a, b) => b.quality - a.quality); // Best quality first
+    
+    const numTiers = 4;
+    const tierSize = Math.ceil(combosWithScore.length / numTiers);
+    const tiers: ComboWithMeta[][] = [];
+    
+    for (let t = 0; t < numTiers; t++) {
+      const start = t * tierSize;
+      const end = Math.min(start + tierSize, combosWithScore.length);
+      const tierCombos = combosWithScore.slice(start, end).map(x => x.combo);
+      
+      // Shuffle within each tier for randomness
+      for (let i = tierCombos.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [tierCombos[i], tierCombos[j]] = [tierCombos[j], tierCombos[i]];
+      }
+      
+      tiers.push(tierCombos);
+    }
+
+    // === PHASE 3: Interleave from tiers with local diversity optimization ===
+    const result: ComboWithMeta[] = [];
+    const maxItems = Math.min(500, baseCombinations.length);
+    
+    // Track colors for diversity within the final list
+    const colorLastSeen = new Map<string, number>();
+    const neighborhoodDepth = 4;
+
+    // Round-robin through tiers, picking best diverse option from each
+    let tierIndex = 0;
+    while (result.length < maxItems && tiers.some(t => t.length > 0)) {
+      // Find next non-empty tier
+      let attempts = 0;
+      while (tiers[tierIndex].length === 0 && attempts < numTiers) {
+        tierIndex = (tierIndex + 1) % numTiers;
+        attempts++;
+      }
+      
+      if (tiers[tierIndex].length === 0) break;
+      
+      const currentTier = tiers[tierIndex];
+      const currentPos = result.length;
+      
+      // Pick the best option from this tier based on local diversity
       let bestIdx = 0;
-      const currentPos = sorted.length;
-
-      for (let i = 0; i < pool.length; i++) {
-        const candidate = pool[i];
+      let bestScore = -Infinity;
+      
+      // Only check first 20 items in tier for performance
+      const checkLimit = Math.min(20, currentTier.length);
+      
+      for (let i = 0; i < checkLimit; i++) {
+        const candidate = currentTier[i];
+        let score = 0;
         
-        // === OBJECTIVE 1: Diversity from neighbors ===
-        let diversityScore = 0;
-        let totalWeight = 0;
-        const neighborsToCheck = Math.min(neighborhoodDepth, sorted.length);
-        for (let n = 0; n < neighborsToCheck; n++) {
-          const neighbor = sorted[sorted.length - 1 - n];
-          const weight = 1 / Math.pow(2, n);
-          const dist = comboDistance(candidate, neighbor);
-          diversityScore += weight * dist;
-          totalWeight += weight;
+        // Diversity from recent neighbors
+        const neighborsToCheck = Math.min(neighborhoodDepth, result.length);
+        if (neighborsToCheck > 0) {
+          for (let n = 0; n < neighborsToCheck; n++) {
+            const neighbor = result[result.length - 1 - n];
+            const weight = 1 / Math.pow(2, n);
+            score += weight * comboDistance(candidate, neighbor);
+          }
+        } else {
+          score = 100; // First item gets neutral score
         }
-        if (totalWeight > 0) {
-          diversityScore /= totalWeight;
-        }
-
-        // === OBJECTIVE 2: General color recency (spread colors evenly) ===
-        const lastSeenC1Any = colorLastSeenAny.get(candidate.c1.id) ?? -Infinity;
-        const lastSeenC2Any = colorLastSeenAny.get(candidate.c2.id) ?? -Infinity;
         
-        const recencyC1 = Math.min(currentPos - lastSeenC1Any, maxRecencyBonus);
-        const recencyC2 = Math.min(currentPos - lastSeenC2Any, maxRecencyBonus);
-        const generalRecencyBonus = Math.min(recencyC1, recencyC2);
-
-        // === OBJECTIVE 3: Position-specific recency (avoid same color in same slot) ===
-        // Strong penalty if this color was recently used in the SAME position (c1 or c2)
-        const lastSeenC1AsC1 = colorLastSeenAsC1.get(candidate.c1.id) ?? -Infinity;
-        const lastSeenC2AsC2 = colorLastSeenAsC2.get(candidate.c2.id) ?? -Infinity;
+        // Bonus for colors not seen recently
+        const lastSeenC1 = colorLastSeen.get(candidate.c1.id) ?? -50;
+        const lastSeenC2 = colorLastSeen.get(candidate.c2.id) ?? -50;
+        const recencyBonus = Math.min(currentPos - lastSeenC1, 30) + Math.min(currentPos - lastSeenC2, 30);
+        score += recencyBonus * 0.5;
         
-        const posRecencyC1 = Math.min(currentPos - lastSeenC1AsC1, maxRecencyBonus);
-        const posRecencyC2 = Math.min(currentPos - lastSeenC2AsC2, maxRecencyBonus);
-        const positionRecencyBonus = Math.min(posRecencyC1, posRecencyC2);
-
-        // === COMBINE SCORES ===
-        // diversityWeight + recencyWeight + positionRecencyWeight should = 1.0
-        const diversityWeight = 1 - recencyWeight - positionRecencyWeight; // 0.5
-        const normalizedGeneralRecency = generalRecencyBonus * 2;
-        const normalizedPositionRecency = positionRecencyBonus * 2;
-        
-        const finalScore = diversityWeight * diversityScore 
-                         + recencyWeight * normalizedGeneralRecency
-                         + positionRecencyWeight * normalizedPositionRecency;
-
-        if (finalScore > bestScore) {
-          bestScore = finalScore;
+        if (score > bestScore) {
+          bestScore = score;
           bestIdx = i;
         }
       }
-
-      const chosen = pool.splice(bestIdx, 1)[0];
-      sorted.push(chosen);
       
-      // Update color tracking - both general and position-specific
-      colorLastSeenAny.set(chosen.c1.id, currentPos);
-      colorLastSeenAny.set(chosen.c2.id, currentPos);
-      colorLastSeenAsC1.set(chosen.c1.id, currentPos);
-      colorLastSeenAsC2.set(chosen.c2.id, currentPos);
+      // Add chosen item to result
+      const chosen = currentTier.splice(bestIdx, 1)[0];
+      result.push(chosen);
       
-      sortedCount++;
+      // Update tracking
+      colorLastSeen.set(chosen.c1.id, currentPos);
+      colorLastSeen.set(chosen.c2.id, currentPos);
+      
+      // Move to next tier
+      tierIndex = (tierIndex + 1) % numTiers;
     }
     
-    // Append remaining unsorted combinations
-    return [...sorted, ...pool];
+    // Append any remaining items from tiers
+    for (const tier of tiers) {
+      result.push(...tier);
+    }
+    
+    return result;
   }, [baseCombinations, isDiverse, excludeInverse]);
 
   return {

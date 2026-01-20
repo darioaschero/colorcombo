@@ -36,7 +36,7 @@ export const VirtualizedGrid = React.memo(({
 
   if (viewMode === 'large') {
     return (
-      <div className="h-full overflow-y-auto">
+      <>
         {/* Responsive grid: auto-fill columns, min 240px, max 360px each */}
         <div 
           className="grid gap-2"
@@ -66,12 +66,12 @@ export const VirtualizedGrid = React.memo(({
             Showing {maxItems} of {combinations.length} combinations. Adjust filters to see different results.
           </p>
         )}
-      </div>
+      </>
     );
   }
 
   return (
-    <div className="h-full overflow-y-auto">
+    <>
       {/* Mini view: CSS Grid with auto-fill for reliable wrapping */}
       <div 
         className="grid gap-2"
@@ -98,7 +98,7 @@ export const VirtualizedGrid = React.memo(({
           Showing {maxItems} of {combinations.length} combinations. Adjust filters to see different results.
         </p>
       )}
-    </div>
+    </>
   );
 });
 

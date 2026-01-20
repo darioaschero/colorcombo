@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { TAILWIND_COLORS, SHADES, COLOR_NAMES, ALL_COLORS } from './constants';
+import { TAILWIND_COLORS, SHADES, COLOR_NAMES, ALL_COLORS, TUNDRA_COLORS, NEWYORK_COLORS } from './constants';
 import { TemplateType, ContrastLevel, ColorInfo, HSL, RGB } from './types';
+
+type PaletteType = 'tailwind' | 'tundra' | 'newyork';
 
 // --- Utility Functions ---
 
@@ -87,10 +89,10 @@ const HeroPreview = ({ color1, color2, textColor, showCode, code }: { color1: st
       {!showCode && (
         <div className="absolute inset-0 flex flex-col justify-start p-8 pt-10 select-none pointer-events-none" style={{ color: textColor }}>
           <h2 className="text-3xl font-black leading-tight tracking-tight mb-2">
-            The future<br/>of design
+            Lorem ipsum<br/>dolor sit
           </h2>
           <p className="text-sm font-semibold opacity-80 tracking-wide leading-none">
-            Exploring new horizons
+            Consectetur adipiscing elit
           </p>
         </div>
       )}
@@ -108,18 +110,23 @@ const HeroPreview = ({ color1, color2, textColor, showCode, code }: { color1: st
 };
 
 export default function App() {
+  const [paletteType, setPaletteType] = useState<PaletteType>('tundra');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
-    new Set(ALL_COLORS.filter(c => ['400', '500', '600', '700'].includes(c.shade)).map(c => c.id))
+    new Set(TUNDRA_COLORS.map(c => c.id))
   );
   const [template, setTemplate] = useState<TemplateType>(TemplateType.LIGHT);
-  const [minHueDistance, setMinHueDistance] = useState(5);
-  const [minSatDistance, setMinSatDistance] = useState(5);
-  const [minLumDistance, setMinLumDistance] = useState(5);
-  const [minTotalDistance, setMinTotalDistance] = useState(20);
+  const [minHueDistance, setMinHueDistance] = useState(0);
+  const [minSatDistance, setMinSatDistance] = useState(0);
+  const [minLumDistance, setMinLumDistance] = useState(0);
+  const [minTotalDistance, setMinTotalDistance] = useState(0);
   const [minBgContrast, setMinBgContrast] = useState(1.4);
-  const [contrastLevel, setContrastLevel] = useState<ContrastLevel>('AA');
+  const [contrastLevel, setContrastLevel] = useState<ContrastLevel>('A');
   const [viewMode, setViewMode] = useState<ViewMode>('large');
   const [isDiverse, setIsDiverse] = useState(true);
+
+  const currentPalette = paletteType === 'tundra' ? TUNDRA_COLORS : 
+                         paletteType === 'newyork' ? NEWYORK_COLORS : 
+                         ALL_COLORS;
 
   const textColorHex = template === TemplateType.DARK ? '#FFFFFF' : '#000000';
   const textColorRgb = hexToRgb(textColorHex);
@@ -138,17 +145,32 @@ export default function App() {
 
   const toggleColorGroup = (name: string) => {
     const next = new Set(selectedIds);
-    const groupIds = SHADES.map(s => `${name}-${s}`).filter(id => {
-      const color = ALL_COLORS.find(c => c.id === id);
-      return color && checkContrast(color.hex);
-    });
-    const allSelected = groupIds.length > 0 && groupIds.every(id => next.has(id));
-    if (allSelected) groupIds.forEach(id => next.delete(id));
-    else groupIds.forEach(id => next.add(id));
+    if (paletteType === 'tundra') {
+      const color = TUNDRA_COLORS.find(c => c.name === name);
+      if (color) {
+        if (next.has(color.id)) next.delete(color.id);
+        else next.add(color.id);
+      }
+    } else if (paletteType === 'newyork') {
+      const color = NEWYORK_COLORS.find(c => c.name === name);
+      if (color) {
+        if (next.has(color.id)) next.delete(color.id);
+        else next.add(color.id);
+      }
+    } else {
+      const groupIds = SHADES.map(s => `${name}-${s}`).filter(id => {
+        const color = ALL_COLORS.find(c => c.id === id);
+        return color && checkContrast(color.hex);
+      });
+      const allSelected = groupIds.length > 0 && groupIds.every(id => next.has(id));
+      if (allSelected) groupIds.forEach(id => next.delete(id));
+      else groupIds.forEach(id => next.add(id));
+    }
     setSelectedIds(next);
   };
 
   const toggleShadeGroup = (shade: string) => {
+    if (paletteType === 'tundra') return; // No shades for tundra
     const next = new Set(selectedIds);
     const shadeIds = COLOR_NAMES.map(name => `${name}-${shade}`).filter(id => {
       const color = ALL_COLORS.find(c => c.id === id);
@@ -168,20 +190,36 @@ export default function App() {
 
   const selectAll = () => {
     const next = new Set<string>();
-    ALL_COLORS.forEach(c => { if (checkContrast(c.hex)) next.add(c.id); });
+    currentPalette.forEach(c => { if (checkContrast(c.hex)) next.add(c.id); });
     setSelectedIds(next);
   };
   
   const deselectAll = () => setSelectedIds(new Set());
 
+  // Reset selected colors when switching palettes
+  React.useEffect(() => {
+    if (paletteType === 'tundra') {
+      setSelectedIds(new Set(TUNDRA_COLORS.map(c => c.id)));
+    } else if (paletteType === 'newyork') {
+      setSelectedIds(new Set(NEWYORK_COLORS.map(c => c.id)));
+    } else {
+      setSelectedIds(new Set(ALL_COLORS.filter(c => ['400', '500', '600', '700'].includes(c.shade)).map(c => c.id)));
+    }
+  }, [paletteType]);
+
   const getComboCode = (c1: ColorInfo, c2: ColorInfo) => {
+    if (paletteType === 'tundra' || paletteType === 'newyork') {
+      const n1 = c1.name.substring(0, 3).toUpperCase();
+      const n2 = c2.name.substring(0, 3).toUpperCase();
+      return `${n1}-${n2}`;
+    }
     const n1 = c1.name.substring(0, 2).toUpperCase();
     const n2 = c2.name.substring(0, 2).toUpperCase();
     return `${n1}${c1.shade}-${n2}${c2.shade}`;
   };
 
   const baseCombinations = useMemo(() => {
-    const activeColors = ALL_COLORS.filter(c => selectedIds.has(c.id));
+    const activeColors = currentPalette.filter(c => selectedIds.has(c.id));
     const candidates: ComboWithMeta[] = [];
 
     for (let i = 0; i < activeColors.length; i++) {
@@ -226,7 +264,7 @@ export default function App() {
       if (isDiverseEnough) filtered.push(candidate);
     }
     return filtered;
-  }, [selectedIds, template, minHueDistance, minSatDistance, minLumDistance, minTotalDistance, minBgContrast, contrastLevel, textColorRgb, threshold]);
+  }, [selectedIds, template, minHueDistance, minSatDistance, minLumDistance, minTotalDistance, minBgContrast, contrastLevel, textColorRgb, threshold, currentPalette]);
 
   const displayedCombinations = useMemo(() => {
     if (!isDiverse || baseCombinations.length <= 1) return baseCombinations;
@@ -318,40 +356,132 @@ export default function App() {
           </section>
 
           <section className="flex flex-col flex-1 min-h-0 border-t pt-4">
-            <div className="flex justify-between items-end mb-4"><h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Palette Selection</h3><div className="flex gap-2"><button onClick={deselectAll} className="text-[10px] text-slate-400 hover:text-slate-600">None</button><button onClick={selectAll} className="text-[10px] text-slate-400 hover:text-slate-600">All Passing</button></div></div>
+            <div className="flex justify-between items-end mb-4">
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Palette Selection</h3>
+              <div className="flex gap-2">
+                <button onClick={deselectAll} className="text-[10px] text-slate-400 hover:text-slate-600">None</button>
+                <button onClick={selectAll} className="text-[10px] text-slate-400 hover:text-slate-600">All Passing</button>
+              </div>
+            </div>
+            
+            {/* Palette Tabs */}
+            <div className="flex bg-slate-100 p-1 rounded-lg mb-4 gap-1">
+              <button 
+                onClick={() => setPaletteType('tailwind')} 
+                className={`flex-1 px-3 py-2 rounded-md text-xs font-bold transition-all ${paletteType === 'tailwind' ? 'bg-white shadow text-slate-900' : 'text-slate-500'}`}
+              >
+                Tailwind
+              </button>
+              <button 
+                onClick={() => setPaletteType('tundra')} 
+                className={`flex-1 px-3 py-2 rounded-md text-xs font-bold transition-all ${paletteType === 'tundra' ? 'bg-white shadow text-slate-900' : 'text-slate-500'}`}
+              >
+                Tundra
+              </button>
+              <button 
+                onClick={() => setPaletteType('newyork')} 
+                className={`flex-1 px-3 py-2 rounded-md text-xs font-bold transition-all ${paletteType === 'newyork' ? 'bg-white shadow text-slate-900' : 'text-slate-500'}`}
+              >
+                New York
+              </button>
+            </div>
+
             <div className="bg-slate-50 border rounded-xl overflow-hidden flex flex-col flex-1 min-h-0">
-              <div className="grid grid-cols-[80px_repeat(11,minmax(0,1fr))] bg-slate-100 border-b text-[9px] font-bold text-slate-500">
-                <div className="px-2 py-1.5 border-r uppercase flex items-center">Color</div>
-                {SHADES.map(s => (
-                  <button 
-                    key={s} 
-                    onClick={() => toggleShadeGroup(s)}
-                    className="h-8 flex flex-col items-center justify-center hover:bg-slate-200 transition-colors border-l first:border-l-0 border-slate-200"
-                    title={`Toggle all ${s} shades`}
-                  >
-                    <div className="text-[8px] opacity-40">
-                      <i className="fa-solid fa-chevron-down"></i>
-                    </div>
-                  </button>
-                ))}
-              </div>
-              <div className="overflow-y-auto flex-1">
-                {COLOR_NAMES.map(name => {
-                   const shades = SHADES.map(s => ({ hex: TAILWIND_COLORS[name][s], id: `${name}-${s}`, passes: checkContrast(TAILWIND_COLORS[name][s]) }));
-                   return (
-                     <div key={name} className="grid grid-cols-[80px_repeat(11,minmax(0,1fr))] border-b border-slate-100 last:border-0 hover:bg-white group/row">
-                        <button onClick={() => toggleColorGroup(name)} className="px-2 py-1.5 text-[9px] font-bold uppercase text-left truncate border-r border-slate-100 text-slate-400 group-hover/row:text-slate-600">{name}</button>
-                        {shades.map(s => (
-                          <button key={s.id} disabled={!s.passes} onClick={() => toggleId(s.id)} className={`relative h-8 transition-all flex items-center justify-center ${s.passes ? 'cursor-pointer' : 'opacity-10 grayscale pointer-events-none'}`} style={{ backgroundColor: s.hex }}>
-                            {s.passes && selectedIds.has(s.id) && (
-                              <i className={`fa-solid fa-check text-[8px] drop-shadow-sm ${template === TemplateType.LIGHT ? 'text-black' : 'text-white'}`}></i>
-                            )}
-                          </button>
-                        ))}
-                     </div>
-                   );
-                })}
-              </div>
+              {paletteType === 'tundra' ? (
+                // Tundra palette - simple grid of 14 colors
+                <div className="overflow-y-auto flex-1 p-4">
+                  <div className="grid grid-cols-7 gap-2">
+                    {TUNDRA_COLORS.map(color => {
+                      const passes = checkContrast(color.hex);
+                      return (
+                        <button
+                          key={color.id}
+                          disabled={!passes}
+                          onClick={() => toggleId(color.id)}
+                          className={`relative aspect-square rounded-lg transition-all border-2 ${
+                            passes 
+                              ? selectedIds.has(color.id)
+                                ? 'border-indigo-600 ring-2 ring-indigo-200' 
+                                : 'border-slate-200 hover:border-slate-300 cursor-pointer'
+                              : 'opacity-10 grayscale pointer-events-none border-slate-100'
+                          }`}
+                          style={{ backgroundColor: color.hex }}
+                          title={color.name}
+                        >
+                          {passes && selectedIds.has(color.id) && (
+                            <i className={`fa-solid fa-check text-[10px] drop-shadow-sm absolute top-1 right-1 ${template === TemplateType.LIGHT ? 'text-black' : 'text-white'}`}></i>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : paletteType === 'newyork' ? (
+                // New York palette - grid of 24 colors (8 columns x 3 rows)
+                <div className="overflow-y-auto flex-1 p-4">
+                  <div className="grid grid-cols-8 gap-2">
+                    {NEWYORK_COLORS.map(color => {
+                      const passes = checkContrast(color.hex);
+                      return (
+                        <button
+                          key={color.id}
+                          disabled={!passes}
+                          onClick={() => toggleId(color.id)}
+                          className={`relative aspect-square rounded-lg transition-all border-2 ${
+                            passes 
+                              ? selectedIds.has(color.id)
+                                ? 'border-indigo-600 ring-2 ring-indigo-200' 
+                                : 'border-slate-200 hover:border-slate-300 cursor-pointer'
+                              : 'opacity-10 grayscale pointer-events-none border-slate-100'
+                          }`}
+                          style={{ backgroundColor: color.hex }}
+                          title={color.name}
+                        >
+                          {passes && selectedIds.has(color.id) && (
+                            <i className={`fa-solid fa-check text-[10px] drop-shadow-sm absolute top-1 right-1 ${template === TemplateType.LIGHT ? 'text-black' : 'text-white'}`}></i>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                // Tailwind palette - original grid with shades
+                <>
+                  <div className="grid grid-cols-[80px_repeat(11,minmax(0,1fr))] bg-slate-100 border-b text-[9px] font-bold text-slate-500">
+                    <div className="px-2 py-1.5 border-r uppercase flex items-center">Color</div>
+                    {SHADES.map(s => (
+                      <button 
+                        key={s} 
+                        onClick={() => toggleShadeGroup(s)}
+                        className="h-8 flex flex-col items-center justify-center hover:bg-slate-200 transition-colors border-l first:border-l-0 border-slate-200"
+                        title={`Toggle all ${s} shades`}
+                      >
+                        <div className="text-[8px] opacity-40">
+                          <i className="fa-solid fa-chevron-down"></i>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="overflow-y-auto flex-1">
+                    {COLOR_NAMES.map(name => {
+                       const shades = SHADES.map(s => ({ hex: TAILWIND_COLORS[name][s], id: `${name}-${s}`, passes: checkContrast(TAILWIND_COLORS[name][s]) }));
+                       return (
+                         <div key={name} className="grid grid-cols-[80px_repeat(11,minmax(0,1fr))] border-b border-slate-100 last:border-0 hover:bg-white group/row">
+                            <button onClick={() => toggleColorGroup(name)} className="px-2 py-1.5 text-[9px] font-bold uppercase text-left truncate border-r border-slate-100 text-slate-400 group-hover/row:text-slate-600">{name}</button>
+                            {shades.map(s => (
+                              <button key={s.id} disabled={!s.passes} onClick={() => toggleId(s.id)} className={`relative h-8 transition-all flex items-center justify-center ${s.passes ? 'cursor-pointer' : 'opacity-10 grayscale pointer-events-none'}`} style={{ backgroundColor: s.hex }}>
+                                {s.passes && selectedIds.has(s.id) && (
+                                  <i className={`fa-solid fa-check text-[8px] drop-shadow-sm ${template === TemplateType.LIGHT ? 'text-black' : 'text-white'}`}></i>
+                                )}
+                              </button>
+                            ))}
+                         </div>
+                       );
+                    })}
+                  </div>
+                </>
+              )}
             </div>
           </section>
         </aside>

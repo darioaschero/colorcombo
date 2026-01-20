@@ -22,6 +22,7 @@ export default function App() {
   const [contrastLevel, setContrastLevel] = useState<ContrastLevel>('A');
   const [viewMode, setViewMode] = useState<ViewMode>('large');
   const [isDiverse, setIsDiverse] = useState(true);
+  const [excludeInverse, setExcludeInverse] = useState(false);
 
   const [isPending, startTransition] = useTransition();
 
@@ -45,6 +46,7 @@ export default function App() {
     minLumDistance,
     minTotalDistance,
     isDiverse,
+    excludeInverse,
   });
 
   // Memoized toggle functions using startTransition for responsive UI
@@ -198,6 +200,17 @@ export default function App() {
                 <input type="range" min="0" max={ctrl.max} step="1" value={ctrl.val} onChange={(e) => ctrl.set(parseInt(e.target.value))} className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600" />
               </div>
             ))}
+
+            {/* Exclude inverse combinations checkbox */}
+            <label className="flex items-center gap-2 mt-2 cursor-pointer group">
+              <input 
+                type="checkbox" 
+                checked={excludeInverse} 
+                onChange={(e) => setExcludeInverse(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+              />
+              <span className="text-[11px] text-slate-500 group-hover:text-slate-700">Exclude inverse combinations</span>
+            </label>
           </section>
 
           <section className="flex flex-col flex-1 min-h-0 border-t pt-4">

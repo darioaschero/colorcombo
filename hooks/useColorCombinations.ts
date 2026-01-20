@@ -26,6 +26,7 @@ interface UseColorCombinationsOptions {
   minLumDistance: number;
   minTotalDistance: number;
   isDiverse: boolean;
+  excludeInverse: boolean;
 }
 
 export function useColorCombinations({
@@ -39,6 +40,7 @@ export function useColorCombinations({
   minLumDistance,
   minTotalDistance,
   isDiverse,
+  excludeInverse,
 }: UseColorCombinationsOptions) {
   // Defer selectedIds to prevent blocking UI during color selection
   const deferredSelectedIds = useDeferredValue(selectedIds);
@@ -111,7 +113,13 @@ export function useColorCombinations({
         const lumDist = Math.abs(hsl1.l - hsl2.l);
 
         if (hueDist >= minHueDistance && satDist >= minSatDistance && lumDist >= minLumDistance) {
+          // Add the combination
           candidates.push({ c1, c2, hsl1, hsl2 });
+          
+          // Also add the inverse combination (c2, c1) if not excluding inverses
+          if (!excludeInverse) {
+            candidates.push({ c1: c2, c2: c1, hsl1: hsl2, hsl2: hsl1 });
+          }
         }
       }
     }
@@ -140,7 +148,7 @@ export function useColorCombinations({
       if (isDiverseEnough) filtered.push(candidate);
     }
     return filtered;
-  }, [deferredSelectedIds, minHueDistance, minSatDistance, minLumDistance, minTotalDistance, minBgContrast, colorDataCache, currentPalette]);
+  }, [deferredSelectedIds, minHueDistance, minSatDistance, minLumDistance, minTotalDistance, minBgContrast, excludeInverse, colorDataCache, currentPalette]);
 
   // Apply diverse sorting if enabled - but only for display ordering
   const displayedCombinations = useMemo(() => {

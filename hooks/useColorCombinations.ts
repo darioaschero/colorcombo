@@ -157,33 +157,12 @@ export function useColorCombinations({
     return filtered;
   }, [deferredSelectedIds, minHueDistance, minSatDistance, minLumDistance, minTotalDistance, minBgContrast, excludeInverse, colorDataCache, currentPalette]);
 
-  // Apply diverse sorting if enabled - using weighted neighborhood algorithm
-  // This considers multiple neighbors with exponentially decreasing weights
-  // so items are different not just from immediate neighbor but from nearby items too
+  // Apply diverse sorting using Quality Tiers + Interleave approach
+  // This ensures homogeneous diversity throughout the ENTIRE list, not just at the beginning
   const displayedCombinations = useMemo(() => {
     if (!isDiverse || baseCombinations.length <= 1) return baseCombinations;
 
-    // Shuffle the pool first to remove bias from original order
-    // Using Fisher-Yates shuffle for uniform distribution
-    const pool = [...baseCombinations];
-    for (let i = pool.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [pool[i], pool[j]] = [pool[j], pool[i]];
-    }
-    
-    const sorted: ComboWithMeta[] = [pool.shift()!];
-
-    // Limit diversity sorting to first 500 to keep it fast
-    const maxDiversitySort = Math.min(500, pool.length);
-    let sortedCount = 1;
-
-    // How many neighbors to consider (affects how "globally" diverse the sorting is)
-    // More neighbors = better global diversity but slower
-    const neighborhoodDepth = 6;
-
     // Helper: calculate distance between two combinations
-    // When excluding inverses, check both orientations (A,B same as B,A)
-    // When including inverses, only check direct orientation (A,B different from B,A)
     const comboDistance = (a: ComboWithMeta, b: ComboWithMeta): number => {
       const d1 = getColorDistance(a.hsl1, b.hsl1) + getColorDistance(a.hsl2, b.hsl2);
       if (excludeInverse) {
@@ -193,43 +172,111 @@ export function useColorCombinations({
       return d1;
     };
 
-    while (pool.length > 0 && sortedCount < maxDiversitySort) {
-      let bestScore = -Infinity;
+    // === PHASE 1: Calculate quality score for each combination ===
+    // Quality = internal diversity (how different c1 and c2 are from each other)
+    // Higher score = more visually interesting combination
+    const combosWithScore = baseCombinations.map(combo => ({
+      combo,
+      quality: getColorDistance(combo.hsl1, combo.hsl2)
+    }));
+
+    // === PHASE 2: Sort by quality and divide into tiers ===
+    combosWithScore.sort((a, b) => b.quality - a.quality); // Best quality first
+    
+    const numTiers = 4;
+    const tierSize = Math.ceil(combosWithScore.length / numTiers);
+    const tiers: ComboWithMeta[][] = [];
+    
+    for (let t = 0; t < numTiers; t++) {
+      const start = t * tierSize;
+      const end = Math.min(start + tierSize, combosWithScore.length);
+      const tierCombos = combosWithScore.slice(start, end).map(x => x.combo);
+      
+      // Shuffle within each tier for randomness
+      for (let i = tierCombos.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [tierCombos[i], tierCombos[j]] = [tierCombos[j], tierCombos[i]];
+      }
+      
+      tiers.push(tierCombos);
+    }
+
+    // === PHASE 3: Interleave from tiers with local diversity optimization ===
+    const result: ComboWithMeta[] = [];
+    const maxItems = Math.min(500, baseCombinations.length);
+    
+    // Track colors for diversity within the final list
+    const colorLastSeen = new Map<string, number>();
+    const neighborhoodDepth = 4;
+
+    // Round-robin through tiers, picking best diverse option from each
+    let tierIndex = 0;
+    while (result.length < maxItems && tiers.some(t => t.length > 0)) {
+      // Find next non-empty tier
+      let attempts = 0;
+      while (tiers[tierIndex].length === 0 && attempts < numTiers) {
+        tierIndex = (tierIndex + 1) % numTiers;
+        attempts++;
+      }
+      
+      if (tiers[tierIndex].length === 0) break;
+      
+      const currentTier = tiers[tierIndex];
+      const currentPos = result.length;
+      
+      // Pick the best option from this tier based on local diversity
       let bestIdx = 0;
-
-      for (let i = 0; i < pool.length; i++) {
-        const candidate = pool[i];
+      let bestScore = -Infinity;
+      
+      // Only check first 20 items in tier for performance
+      const checkLimit = Math.min(20, currentTier.length);
+      
+      for (let i = 0; i < checkLimit; i++) {
+        const candidate = currentTier[i];
         let score = 0;
-        let totalWeight = 0;
-
-        // Calculate weighted distance to recent neighbors
-        // Weight decreases exponentially: 1.0, 0.5, 0.25, 0.125, ...
-        const neighborsToCheck = Math.min(neighborhoodDepth, sorted.length);
-        for (let n = 0; n < neighborsToCheck; n++) {
-          const neighbor = sorted[sorted.length - 1 - n];
-          const weight = 1 / Math.pow(2, n); // 1, 0.5, 0.25, 0.125...
-          const dist = comboDistance(candidate, neighbor);
-          score += weight * dist;
-          totalWeight += weight;
+        
+        // Diversity from recent neighbors
+        const neighborsToCheck = Math.min(neighborhoodDepth, result.length);
+        if (neighborsToCheck > 0) {
+          for (let n = 0; n < neighborsToCheck; n++) {
+            const neighbor = result[result.length - 1 - n];
+            const weight = 1 / Math.pow(2, n);
+            score += weight * comboDistance(candidate, neighbor);
+          }
+        } else {
+          score = 100; // First item gets neutral score
         }
-
-        // Normalize by total weight to make scores comparable
-        if (totalWeight > 0) {
-          score /= totalWeight;
-        }
-
+        
+        // Bonus for colors not seen recently
+        const lastSeenC1 = colorLastSeen.get(candidate.c1.id) ?? -50;
+        const lastSeenC2 = colorLastSeen.get(candidate.c2.id) ?? -50;
+        const recencyBonus = Math.min(currentPos - lastSeenC1, 30) + Math.min(currentPos - lastSeenC2, 30);
+        score += recencyBonus * 0.5;
+        
         if (score > bestScore) {
           bestScore = score;
           bestIdx = i;
         }
       }
-
-      sorted.push(pool.splice(bestIdx, 1)[0]);
-      sortedCount++;
+      
+      // Add chosen item to result
+      const chosen = currentTier.splice(bestIdx, 1)[0];
+      result.push(chosen);
+      
+      // Update tracking
+      colorLastSeen.set(chosen.c1.id, currentPos);
+      colorLastSeen.set(chosen.c2.id, currentPos);
+      
+      // Move to next tier
+      tierIndex = (tierIndex + 1) % numTiers;
     }
     
-    // Append remaining unsorted combinations
-    return [...sorted, ...pool];
+    // Append any remaining items from tiers
+    for (const tier of tiers) {
+      result.push(...tier);
+    }
+    
+    return result;
   }, [baseCombinations, isDiverse, excludeInverse]);
 
   return {

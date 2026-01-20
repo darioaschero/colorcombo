@@ -157,9 +157,8 @@ export function useColorCombinations({
     return filtered;
   }, [deferredSelectedIds, minHueDistance, minSatDistance, minLumDistance, minTotalDistance, minBgContrast, excludeInverse, colorDataCache, currentPalette]);
 
-  // Apply diverse sorting if enabled - using weighted neighborhood algorithm
-  // This considers multiple neighbors with exponentially decreasing weights
-  // so items are different not just from immediate neighbor but from nearby items too
+  // Apply diverse sorting if enabled - using multi-objective algorithm
+  // Objectives: 1) Maximize distance from neighbors, 2) Spread colors evenly throughout list
   const displayedCombinations = useMemo(() => {
     if (!isDiverse || baseCombinations.length <= 1) return baseCombinations;
 
@@ -171,19 +170,25 @@ export function useColorCombinations({
       [pool[i], pool[j]] = [pool[j], pool[i]];
     }
     
-    const sorted: ComboWithMeta[] = [pool.shift()!];
+    const firstItem = pool.shift()!;
+    const sorted: ComboWithMeta[] = [firstItem];
+
+    // Track when each color was last seen (by position in sorted list)
+    // Key: color id, Value: last position where this color appeared
+    const colorLastSeen = new Map<string, number>();
+    colorLastSeen.set(firstItem.c1.id, 0);
+    colorLastSeen.set(firstItem.c2.id, 0);
 
     // Limit diversity sorting to first 500 to keep it fast
     const maxDiversitySort = Math.min(500, pool.length);
     let sortedCount = 1;
 
-    // How many neighbors to consider (affects how "globally" diverse the sorting is)
-    // More neighbors = better global diversity but slower
-    const neighborhoodDepth = 6;
+    // Algorithm parameters
+    const neighborhoodDepth = 6;  // How many neighbors to consider for diversity
+    const recencyWeight = 0.4;    // Balance between diversity (1-λ) and color spread (λ)
+    const maxRecencyBonus = 100;  // Cap the recency bonus to prevent domination
 
     // Helper: calculate distance between two combinations
-    // When excluding inverses, check both orientations (A,B same as B,A)
-    // When including inverses, only check direct orientation (A,B different from B,A)
     const comboDistance = (a: ComboWithMeta, b: ComboWithMeta): number => {
       const d1 = getColorDistance(a.hsl1, b.hsl1) + getColorDistance(a.hsl2, b.hsl2);
       if (excludeInverse) {
@@ -196,35 +201,60 @@ export function useColorCombinations({
     while (pool.length > 0 && sortedCount < maxDiversitySort) {
       let bestScore = -Infinity;
       let bestIdx = 0;
+      const currentPos = sorted.length;
 
       for (let i = 0; i < pool.length; i++) {
         const candidate = pool[i];
-        let score = 0;
+        
+        // === OBJECTIVE 1: Diversity from neighbors ===
+        let diversityScore = 0;
         let totalWeight = 0;
-
-        // Calculate weighted distance to recent neighbors
-        // Weight decreases exponentially: 1.0, 0.5, 0.25, 0.125, ...
         const neighborsToCheck = Math.min(neighborhoodDepth, sorted.length);
         for (let n = 0; n < neighborsToCheck; n++) {
           const neighbor = sorted[sorted.length - 1 - n];
-          const weight = 1 / Math.pow(2, n); // 1, 0.5, 0.25, 0.125...
+          const weight = 1 / Math.pow(2, n);
           const dist = comboDistance(candidate, neighbor);
-          score += weight * dist;
+          diversityScore += weight * dist;
           totalWeight += weight;
         }
-
-        // Normalize by total weight to make scores comparable
         if (totalWeight > 0) {
-          score /= totalWeight;
+          diversityScore /= totalWeight;
         }
 
-        if (score > bestScore) {
-          bestScore = score;
+        // === OBJECTIVE 2: Color recency (spread colors evenly) ===
+        // Bonus for using colors that haven't been seen recently
+        const lastSeenC1 = colorLastSeen.get(candidate.c1.id) ?? -Infinity;
+        const lastSeenC2 = colorLastSeen.get(candidate.c2.id) ?? -Infinity;
+        
+        // How long since each color was last used
+        const recencyC1 = currentPos - lastSeenC1;
+        const recencyC2 = currentPos - lastSeenC2;
+        
+        // Use minimum recency (most recently used color determines bonus)
+        // This encourages spreading ALL colors, not just one
+        const recencyBonus = Math.min(
+          Math.min(recencyC1, recencyC2),
+          maxRecencyBonus
+        );
+
+        // === COMBINE SCORES ===
+        // Normalize recency to be in similar range as diversity (roughly 0-100)
+        const normalizedRecency = recencyBonus * 2;
+        const finalScore = (1 - recencyWeight) * diversityScore + recencyWeight * normalizedRecency;
+
+        if (finalScore > bestScore) {
+          bestScore = finalScore;
           bestIdx = i;
         }
       }
 
-      sorted.push(pool.splice(bestIdx, 1)[0]);
+      const chosen = pool.splice(bestIdx, 1)[0];
+      sorted.push(chosen);
+      
+      // Update color last seen positions
+      colorLastSeen.set(chosen.c1.id, currentPos);
+      colorLastSeen.set(chosen.c2.id, currentPos);
+      
       sortedCount++;
     }
     

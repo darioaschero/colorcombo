@@ -335,7 +335,7 @@ export default function App() {
           </div>
 
           {/* Results Grid */}
-          <div className="flex-1 px-8 pb-8 overflow-hidden">
+          <div className="flex-1 px-8 pb-8 min-h-0 overflow-y-auto">
             <VirtualizedGrid
               combinations={combinations}
               viewMode={viewMode}

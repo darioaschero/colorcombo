@@ -72,7 +72,13 @@ export const VirtualizedGrid = React.memo(({
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="flex flex-wrap gap-2">
+      {/* Mini view: CSS Grid with auto-fill for reliable wrapping */}
+      <div 
+        className="grid gap-2"
+        style={{ 
+          gridTemplateColumns: 'repeat(auto-fill, 112px)',
+        }}
+      >
         {displayedCombos.map((combo, idx) => (
           <div 
             key={`${combo.c1.id}-${combo.c2.id}-${idx}`}
